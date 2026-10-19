@@ -31,10 +31,11 @@ public class MainActivity extends Activity {
  ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setFitsSystemWindows(true);
  root=new LinearLayout(this);root.setOrientation(1);root.setPadding(16,20,16,28);root.setBackgroundColor(BG);scroll.addView(root);setContentView(scroll);
  label("✦ ELİF",34,GOLD);
- label("KARAOKE  •  SES KAYIT STÜDYOSU  v0.6",13,PURPLE);
+ label("KARAOKE  •  SES KAYIT STÜDYOSU  v0.7",13,PURPLE);
  status=label("Şarkınızı seçerek başlayın",15,Color.WHITE);
  musicName=label("Henüz şarkı seçilmedi",19,GOLD);
  button("♫  ŞARKI SEÇ / ARŞİVE EKLE",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,10);});
+ button("⌕  DÜNYA MÜZİK KÜTÜPHANESİ",()->showGlobalMusicLibrary());
  button("▤  MÜZİK ARŞİVİM",()->showMusicArchive());
  button("▶  OYNAT / DURAKLAT",()->{if(player==null){msg("Önce şarkı seçin");return;}if(silentMode){msg("Sessiz modda müzik çalmaz. KAYDET ile başlayın.");return;}if(player.isPlaying())player.pause();else player.start();});
  seek=new SeekBar(this);root.addView(seek);timeLabel=label("00:00 / 00:00",13,Color.LTGRAY);
@@ -56,6 +57,40 @@ public class MainActivity extends Activity {
  }
  Uri currentSong;
 
+
+ void showGlobalMusicLibrary(){
+  EditText query=new EditText(this);query.setSingleLine(true);query.setHint("Sanatçı veya şarkı ara");query.setText("Şehnaz");
+  LinearLayout layout=new LinearLayout(this);layout.setPadding(28,12,28,8);layout.addView(query);
+  new AlertDialog.Builder(this).setTitle("Dünya Müzik Kütüphanesi").setMessage("Sanatçı ve şarkı kataloğunda arama yapın. Müzik yayını değil, katalog bilgisidir.").setView(layout).setNegativeButton("Kapat",null).setPositiveButton("ARA",(d,w)->searchMusicCatalog(query.getText().toString().trim())).show();
+ }
+ void searchMusicCatalog(String query){
+  if(query.isEmpty()){msg("Sanatçı veya şarkı yazın");return;}
+  msg("Müzik kataloğu aranıyor: "+query);
+  new Thread(()->{
+   ArrayList<String> names=new ArrayList<>(),artists=new ArrayList<>();
+   String error=null;
+   try{
+    String url="https://musicbrainz.org/ws/2/recording/?query="+java.net.URLEncoder.encode(query,"UTF-8")+"&fmt=json&limit=40";
+    HttpURLConnection conn=(HttpURLConnection)new URL(url).openConnection();conn.setConnectTimeout(10000);conn.setReadTimeout(10000);conn.setRequestProperty("User-Agent","ELIF-Ses-Studyosu/0.7 (Android music catalog)");
+    StringBuilder body=new StringBuilder();try(BufferedReader br=new BufferedReader(new InputStreamReader(conn.getInputStream(),"UTF-8"))){String line;while((line=br.readLine())!=null)body.append(line);}finally{conn.disconnect();}
+    JSONArray recordings=new JSONObject(body.toString()).optJSONArray("recordings");
+    if(recordings!=null)for(int i=0;i<recordings.length();i++){
+     JSONObject item=recordings.getJSONObject(i);String title=item.optString("title","");JSONArray credits=item.optJSONArray("artist-credit");String artist="";
+     if(credits!=null)for(int j=0;j<credits.length();j++){Object entry=credits.opt(j);if(entry instanceof JSONObject){JSONObject a=((JSONObject)entry).optJSONObject("artist");if(a!=null){if(!artist.isEmpty())artist+=", ";artist+=a.optString("name","");}}}
+     if(!title.isEmpty()){names.add(title+" — "+artist);artists.add(artist+"\n"+title);}
+    }
+   }catch(Exception e){error=e.getMessage();}
+   final String err=error;runOnUiThread(()->{
+    if(err!=null){msg("Katalog bağlantı hatası: "+err);return;}
+    if(names.isEmpty()){msg("Katalogda eşleşme bulunamadı");return;}
+    msg(names.size()+" katalog sonucu bulundu");
+    new AlertDialog.Builder(this).setTitle("Müzik Kütüphanesi — "+query).setItems(names.toArray(new String[0]),(d,w)->{
+      String[] item=artists.get(w).split("\n",2);searchArtist=item[0];searchTrack=item.length>1?item[1]:"";searchLyrics(searchTrack,searchArtist);
+      msg("Söz aranıyor: "+searchTrack+" — "+searchArtist+". Ses dosyası için kendi MP3'ünüzü seçin.");
+    }).setNegativeButton("Kapat",null).show();
+   });
+  }).start();
+ }
  void showMusicArchive(){
   android.content.SharedPreferences p=getSharedPreferences("music_archive",MODE_PRIVATE);
   String raw=p.getString("uris","");
