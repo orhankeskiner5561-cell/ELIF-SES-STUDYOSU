@@ -18,7 +18,7 @@ import java.io.*;
 
 public class MainActivity extends Activity {
  final int BG=0xff100b1a, PANEL=0xff241b32, PURPLE=0xffad80ff, GOLD=0xfff4cf83;
- LinearLayout root; TextView status,musicName,recordName,level,lyricsView,recordList; ArrayList<Long> lyricTimes=new ArrayList<>(); ArrayList<String> lyricLines=new ArrayList<>(); Spinner mic; SeekBar seek; TextView timeLabel; String searchTrack="",searchArtist=""; int lyricsRequest=0; boolean dragging=false; boolean silentMode=false; long silentStartMs=0; int silentBaseMs=0; int silentPositionMs=0; TextView silentButton;
+ LinearLayout root; TextView status,musicName,recordName,level,lyricsView,recordList; ArrayList<Long> lyricTimes=new ArrayList<>(); ArrayList<String> lyricLines=new ArrayList<>(); Spinner mic; SeekBar seek; TextView timeLabel; String searchTrack="",searchArtist=""; boolean catalogSelection=false; int lyricsRequest=0; boolean dragging=false; boolean silentMode=false; long silentStartMs=0; int silentBaseMs=0; int silentPositionMs=0; TextView silentButton;
  MediaPlayer player,recordPlayer; MediaRecorder recorder;
  AudioManager audio; ArrayList<AudioDeviceInfo> inputs=new ArrayList<>();
  File recorded; boolean recording=false; Handler handler=new Handler(Looper.getMainLooper());
@@ -31,19 +31,19 @@ public class MainActivity extends Activity {
  ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setFitsSystemWindows(true);
  root=new LinearLayout(this);root.setOrientation(1);root.setPadding(16,20,16,28);root.setBackgroundColor(BG);scroll.addView(root);setContentView(scroll);
  label("✦ ELİF",34,GOLD);
- label("KARAOKE  •  SES KAYIT STÜDYOSU  v0.7",13,PURPLE);
+ label("KARAOKE  •  SES KAYIT STÜDYOSU  v0.8",13,PURPLE);
  status=label("Şarkınızı seçerek başlayın",15,Color.WHITE);
  musicName=label("Henüz şarkı seçilmedi",19,GOLD);
  button("♫  ŞARKI SEÇ / ARŞİVE EKLE",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,10);});
  button("⌕  DÜNYA MÜZİK KÜTÜPHANESİ",()->showGlobalMusicLibrary());
  button("▤  MÜZİK ARŞİVİM",()->showMusicArchive());
- button("▶  OYNAT / DURAKLAT",()->{if(player==null){msg("Önce şarkı seçin");return;}if(silentMode){msg("Sessiz modda müzik çalmaz. KAYDET ile başlayın.");return;}if(player.isPlaying())player.pause();else player.start();});
+ button("▶  OYNAT / DURAKLAT",()->{if(player==null){msg(catalogSelection?"Katalogda ses dosyası yok. Dinlemek için ŞARKI SEÇ ile MP3 açın.":"Önce şarkı seçin");return;}if(silentMode){msg("Sessiz modda müzik çalmaz. KAYDET ile başlayın.");return;}if(player.isPlaying())player.pause();else player.start();});
  seek=new SeekBar(this);root.addView(seek);timeLabel=label("00:00 / 00:00",13,Color.LTGRAY);
  seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onStartTrackingTouch(SeekBar b){dragging=true;}public void onStopTrackingTouch(SeekBar b){dragging=false;if(player!=null){player.seekTo(b.getProgress());if(silentMode&&recording){silentBaseMs=b.getProgress();silentStartMs=android.os.SystemClock.elapsedRealtime();}}}public void onProgressChanged(SeekBar b,int v,boolean user){}});
  label("ŞARKI SÖZLERİ",20,GOLD);
  lyricsView=label("Şarkı seçtiğinizde sözler otomatik aranır. Bulunursa müzikle birlikte akar.",24,Color.WHITE);
  lyricsView.setGravity(Gravity.CENTER);lyricsView.setMinHeight(220);lyricsView.setBackgroundColor(PANEL);
- button("↻  SÖZLERİ TEKRAR ARA",()->{if(currentSong!=null)autoLyrics(currentSong);else msg("Önce şarkı seçin");});
+ button("↻  SÖZLERİ TEKRAR ARA",()->{if(!searchTrack.isEmpty())searchLyrics(searchTrack,searchArtist);else msg("Önce şarkı seçin");});
  button("✎  ŞARKI ADI / SANATÇI DÜZELT",()->editLyricsSearch());
  silentButton=button("◌  SESSİZ KARAOKE: KAPALI",()->{if(recording){msg("Önce kaydı bitirin");return;}silentMode=!silentMode;if(player!=null&&player.isPlaying())player.pause();silentButton.setText(silentMode?"◉  SESSİZ KARAOKE: AÇIK":"◌  SESSİZ KARAOKE: KAPALI");msg(silentMode?"Hoparlör sessiz. Kayıtta sözler zamanla ilerleyecek.":"Normal oynatma modu.");});
  button("●  SÖYLE VE KAYDET",()->{if(recording)stopRecord();else startRecord();});
@@ -85,7 +85,7 @@ public class MainActivity extends Activity {
     if(names.isEmpty()){msg("Katalogda eşleşme bulunamadı");return;}
     msg(names.size()+" katalog sonucu bulundu");
     new AlertDialog.Builder(this).setTitle("Müzik Kütüphanesi — "+query).setItems(names.toArray(new String[0]),(d,w)->{
-      String[] item=artists.get(w).split("\n",2);searchArtist=item[0];searchTrack=item.length>1?item[1]:"";searchLyrics(searchTrack,searchArtist);
+      String[] item=artists.get(w).split("\n",2);searchArtist=item[0];searchTrack=item.length>1?item[1]:"";catalogSelection=true;if(player!=null){player.release();player=null;}currentSong=null;seek.setProgress(0);timeLabel.setText("00:00 / 00:00");musicName.setText(searchTrack+" — "+searchArtist);searchLyrics(searchTrack,searchArtist);
       msg("Söz aranıyor: "+searchTrack+" — "+searchArtist+". Ses dosyası için kendi MP3'ünüzü seçin.");
     }).setNegativeButton("Kapat",null).show();
    });
@@ -112,7 +112,7 @@ public class MainActivity extends Activity {
   return s.length()>110?s.substring(0,110).trim():s;
  }
  void editLyricsSearch(){
-  if(currentSong==null){msg("Önce şarkı seçin");return;}
+  if(searchTrack.isEmpty()){msg("Önce şarkı seçin");return;}
   LinearLayout layout=new LinearLayout(this);layout.setOrientation(1);layout.setPadding(30,12,30,8);
   EditText title=new EditText(this);title.setSingleLine(true);title.setHint("Şarkı adı");title.setText(searchTrack);layout.addView(title);
   EditText artist=new EditText(this);artist.setSingleLine(true);artist.setHint("Sanatçı");artist.setText(searchArtist);layout.addView(artist);
@@ -122,7 +122,7 @@ public class MainActivity extends Activity {
   if(uri==null)return;
   try{if(player!=null)player.release();player=new MediaPlayer();player.setDataSource(this,uri);player.prepare();currentSong=uri;
    String title=displaySongName(uri),artist="";try{MediaMetadataRetriever mr=new MediaMetadataRetriever();mr.setDataSource(this,uri);String meta=mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);String a=mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);if(meta!=null&&!meta.isEmpty())title=meta;if(a!=null)artist=a;mr.release();}catch(Exception ignored){}
-   searchTrack=cleanTitle(title);searchArtist=cleanTitle(artist);
+   catalogSelection=false;searchTrack=cleanTitle(title);searchArtist=cleanTitle(artist);
    if(searchArtist.isEmpty()&&searchTrack.contains(" - ")){String[] parts=searchTrack.split(" - ",2);searchArtist=parts[0].trim();searchTrack=parts[1].trim();}
    musicName.setText(searchTrack+(searchArtist.isEmpty()?"":" — "+searchArtist));msg("Müzik hazır");rememberSong(uri);searchLyrics(searchTrack,searchArtist);
   }catch(Exception e){msg("Müzik açılamadı: "+e.getMessage());}
@@ -163,7 +163,7 @@ public class MainActivity extends Activity {
      }catch(Exception ex){error=ex.getMessage();}finally{if(conn!=null)conn.disconnect();}
      if(synced!=null)break;
     }
-    if(synced==null)throw new Exception("Bu şarkının zamanlı sözleri arşivde yok");
+    if(synced==null)throw new Exception("Bu şarkı için zamanlı söz bulunamadı. İsterseniz LRC dosyası ekleyin");
     ArrayList<Long> times=new ArrayList<>();ArrayList<String> lines=new ArrayList<>();
     java.util.regex.Pattern pattern=java.util.regex.Pattern.compile("\\\\[(\\\\d{1,2}):(\\\\d{2})(?:\\\\.(\\\\d{1,3}))?\\\\]");
     for(String line:synced.split("\\n")){java.util.regex.Matcher m=pattern.matcher(line);if(m.find()){int frac=m.group(3)==null?0:Integer.parseInt((m.group(3)+"00").substring(0,3));times.add((Long.parseLong(m.group(1))*60+Long.parseLong(m.group(2)))*1000+frac);lines.add(line.substring(m.end()).trim());}}
