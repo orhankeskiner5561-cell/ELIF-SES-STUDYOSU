@@ -18,31 +18,52 @@ import java.io.*;
 
 public class MainActivity extends Activity {
  final int BG=0xff100b1a, PANEL=0xff241b32, PURPLE=0xffad80ff, GOLD=0xfff4cf83;
- LinearLayout root; TextView status,musicName,recordName,level,lyricsView,recordList; ArrayList<Long> lyricTimes=new ArrayList<>(); ArrayList<String> lyricLines=new ArrayList<>(); Spinner mic;
+ LinearLayout root; TextView status,musicName,recordName,level,lyricsView,recordList; ArrayList<Long> lyricTimes=new ArrayList<>(); ArrayList<String> lyricLines=new ArrayList<>(); Spinner mic; SeekBar seek; TextView timeLabel; boolean dragging=false;
  MediaPlayer player,recordPlayer; MediaRecorder recorder;
  AudioManager audio; ArrayList<AudioDeviceInfo> inputs=new ArrayList<>();
  File recorded; boolean recording=false; Handler handler=new Handler(Looper.getMainLooper());
  TextView label(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setPadding(18,14,18,14);root.addView(t);return t;}
  TextView button(String s,Runnable r){TextView t=new TextView(this);t.setText(s);t.setTextSize(17);t.setTextColor(Color.WHITE);t.setGravity(Gravity.CENTER);t.setPadding(18,20,18,20);GradientDrawable d=new GradientDrawable();d.setColor(PANEL);d.setCornerRadius(22);d.setStroke(2,PURPLE);t.setBackground(d);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(12,7,12,7);root.addView(t,p);t.setOnClickListener(v->r.run());return t;}
  void msg(String s){status.setText(s);}
- @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);audio=(AudioManager)getSystemService(AUDIO_SERVICE);
- ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);root=new LinearLayout(this);root.setOrientation(1);root.setPadding(16,22,16,24);scroll.setFitsSystemWindows(true);root.setBackgroundColor(BG);scroll.addView(root);setContentView(scroll);
- label("✦  ELİF",34,GOLD);label("PROFESYONEL SES STÜDYOSU  •  v0.3",13,PURPLE);
- status=label("Stüdyo hazır",15,Color.WHITE);
- label("MÜZİK",19,GOLD);musicName=label("Henüz müzik seçilmedi",15,Color.LTGRAY);
- button("♫  TELEFONDAN MÜZİK SEÇ",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,10);});
- button("▶  MÜZİĞİ OYNAT / DURAKLAT",()->{if(player==null){msg("Önce müzik seçin");return;}if(player.isPlaying())player.pause();else player.start();});
- label("MİKROFON GİRİŞİ",19,GOLD);mic=new Spinner(this);root.addView(mic);button("↻  MİKROFONLARI YENİLE",()->refreshMics());refreshMics();
- label("VOKAL KAYDI",19,GOLD);level=label("Mikrofon seviyesi: —",15,PURPLE);
- button("●  KAYDI BAŞLAT",()->startRecord());button("■  KAYDI DURDUR",()->stopRecord());
- recordName=label("Henüz kayıt yok",15,Color.LTGRAY);
- button("▶  SON KAYDI DİNLE",()->playRecording());
- button("▤  TÜM KAYITLAR",()->showRecordings());
- label("KARAOKE / SÖZLER",19,GOLD);button("♫  LRC ŞARKI SÖZÜ DOSYASI SEÇ",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,11);});lyricsView=label("MP3 seçtiğinizde sözler otomatik aranacak.",17,GOLD);handler.post(lyricsTick);
- label("Kulaklıkla müziği dinlerken KAYDI BAŞLAT ile ayrı vokal dosyası oluşturabilirsiniz. Bluetooth kulaklıkta gecikme olabilir.",13,Color.LTGRAY);label("Sözler LRCLIB kaynağında varsa gösterilir. Auto-Tune ve mastering henüz yok.",13,Color.GRAY);
+ @Override public void onCreate(Bundle b){super.onCreate(b);
+ getWindow().setStatusBarColor(0xff24202b);getWindow().setNavigationBarColor(BG);
+ audio=(AudioManager)getSystemService(AUDIO_SERVICE);
+ ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setFitsSystemWindows(true);
+ root=new LinearLayout(this);root.setOrientation(1);root.setPadding(16,20,16,28);root.setBackgroundColor(BG);scroll.addView(root);setContentView(scroll);
+ label("✦ ELİF",34,GOLD);
+ label("KARAOKE  •  SES KAYIT STÜDYOSU  v0.4",13,PURPLE);
+ status=label("Şarkınızı seçerek başlayın",15,Color.WHITE);
+ musicName=label("Henüz şarkı seçilmedi",19,GOLD);
+ button("♫  ŞARKI SEÇ",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,10);});
+ button("▶  OYNAT / DURAKLAT",()->{if(player==null){msg("Önce şarkı seçin");return;}if(player.isPlaying())player.pause();else player.start();});
+ seek=new SeekBar(this);root.addView(seek);timeLabel=label("00:00 / 00:00",13,Color.LTGRAY);
+ seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onStartTrackingTouch(SeekBar b){dragging=true;}public void onStopTrackingTouch(SeekBar b){dragging=false;if(player!=null)player.seekTo(b.getProgress());}public void onProgressChanged(SeekBar b,int v,boolean user){}});
+ label("ŞARKI SÖZLERİ",20,GOLD);
+ lyricsView=label("Şarkı seçtiğinizde sözler otomatik aranır. Bulunursa müzikle birlikte akar.",24,Color.WHITE);
+ lyricsView.setGravity(Gravity.CENTER);lyricsView.setMinHeight(220);lyricsView.setBackgroundColor(PANEL);
+ button("↻  SÖZLERİ TEKRAR ARA",()->{if(currentSong!=null)autoLyrics(currentSong);else msg("Önce şarkı seçin");});
+ button("●  SÖYLE VE KAYDET",()->{if(recording)stopRecord();else startRecord();});
+ level=label("Mikrofon hazır",13,PURPLE);
+ recordName=label("Henüz vokal kaydı yok",14,Color.LTGRAY);
+ button("▶  KAYDI DİNLE",()->playRecording());
+ button("▤  KAYITLARIM",()->showRecordings());
+ button("⚙  STÜDYO AYARLARI",()->showSettings());
+ mic=new Spinner(this);refreshMics();
+ handler.post(lyricsTick);
  }
- Runnable lyricsTick=new Runnable(){public void run(){if(player!=null&&player.isPlaying()&&!lyricTimes.isEmpty()){long pos=player.getCurrentPosition();int index=-1;for(int i=0;i<lyricTimes.size();i++){if(lyricTimes.get(i)<=pos)index=i;else break;}lyricsView.setText(index>=0?lyricLines.get(index):"♪");}handler.postDelayed(this,200);}};
- void showRecordings(){File[] files=getFilesDir().listFiles((dir,name)->name.startsWith("elif-")&&name.endsWith(".m4a"));if(files==null||files.length==0){msg("Henüz kayıt yok");return;}Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));String[] names=new String[files.length];for(int i=0;i<files.length;i++)names[i]=files[i].getName();new AlertDialog.Builder(this).setTitle("ELİF kayıtlarım").setItems(names,(d,which)->{recorded=files[which];recordName.setText("Seçili kayıt: "+recorded.getName());playRecording();}).setNegativeButton("Kapat",null).show();}
+ Uri currentSong;
+ void showSettings(){
+ LinearLayout panel=new LinearLayout(this);panel.setOrientation(1);panel.setPadding(24,12,24,8);
+ TextView caption=new TextView(this);caption.setText("Mikrofon girişini seçin. Kablolu kulaklık daha düşük gecikme sağlar.");caption.setTextColor(Color.DKGRAY);panel.addView(caption);
+ if(mic.getParent()!=null)((android.view.ViewGroup)mic.getParent()).removeView(mic);
+ panel.addView(mic);refreshMics();
+ new AlertDialog.Builder(this).setTitle("Stüdyo ayarları").setView(panel)
+ .setNeutralButton("LRC DOSYASI", (d,w)->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,11);})
+ .setPositiveButton("Tamam",null).show();
+ }
+ String formatTime(int ms){int sec=Math.max(0,ms/1000);return String.format(java.util.Locale.getDefault(),"%02d:%02d",sec/60,sec%60);}
+ Runnable lyricsTick=new Runnable(){public void run(){if(player!=null){if(seek!=null&&!dragging){seek.setMax(Math.max(1,player.getDuration()));seek.setProgress(player.getCurrentPosition());timeLabel.setText(formatTime(player.getCurrentPosition())+" / "+formatTime(player.getDuration()));}if(player.isPlaying()&&!lyricTimes.isEmpty()){long pos=player.getCurrentPosition();int index=-1;for(int i=0;i<lyricTimes.size();i++){if(lyricTimes.get(i)<=pos)index=i;else break;}lyricsView.setText(index>=0?lyricLines.get(index):"♪");}}handler.postDelayed(this,200);}};
+ void showRecordings(){File[] files=getFilesDir().listFiles((dir,name)->name.startsWith("elif-")&&name.endsWith(".m4a"));if(files==null||files.length==0){msg("Henüz kayıt yok");return;}Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));String[] names=new String[files.length];for(int i=0;i<files.length;i++)names[i]=files[i].getName();new AlertDialog.Builder(this).setTitle("ELİF kayıtlarım").setItems(names,(d,which)->{recorded=files[which];recordName.setText("Seçili vokal kaydı");playRecording();}).setNegativeButton("Kapat",null).show();}
  void loadLyrics(Uri uri){lyricTimes.clear();lyricLines.clear();try(java.io.BufferedReader br=new java.io.BufferedReader(new java.io.InputStreamReader(getContentResolver().openInputStream(uri)))){String line;while((line=br.readLine())!=null){java.util.regex.Matcher m=java.util.regex.Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,3}))?\\]").matcher(line);int last=0;while(m.find()){int frac=m.group(3)==null?0:Integer.parseInt((m.group(3)+"00").substring(0,3));lyricTimes.add((Long.parseLong(m.group(1))*60+Long.parseLong(m.group(2)))*1000+frac);last=m.end();}if(last>0){String words=line.substring(last).trim();while(lyricLines.size()<lyricTimes.size())lyricLines.add(words);}}ArrayList<Integer> order=new ArrayList<>();for(int i=0;i<lyricTimes.size();i++)order.add(i);order.sort((a,b)->Long.compare(lyricTimes.get(a),lyricTimes.get(b)));ArrayList<Long> ts=new ArrayList<>();ArrayList<String> ls=new ArrayList<>();for(int i:order){ts.add(lyricTimes.get(i));ls.add(lyricLines.get(i));}lyricTimes=ts;lyricLines=ls;lyricsView.setText(ls.isEmpty()?"Bu dosyada zaman etiketli LRC satırı bulunamadı. [00:12.00] söz biçiminde dosya seçin.":"Söz yüklendi: "+ls.size()+" satır");}catch(Exception e){lyricsView.setText("LRC okunamadı: "+e.getMessage());}}
  void autoLyrics(Uri uri){
  lyricTimes.clear();lyricLines.clear();lyricsView.setText("Şarkı sözleri aranıyor...");
@@ -75,8 +96,8 @@ void refreshMics(){inputs.clear();ArrayList<String> names=new ArrayList<>();name
  catch(Exception e){msg("Kayıt hatası: "+e.getMessage());release();}}
  Runnable meterTick=new Runnable(){public void run(){if(!recording||recorder==null)return;try{level.setText("Mikrofon seviyesi: "+recorder.getMaxAmplitude());}catch(Exception ignored){}handler.postDelayed(this,150);}};
  void release(){if(recorder!=null){try{recorder.release();}catch(Exception ignored){}recorder=null;}}
- void stopRecord(){if(!recording)return;recording=false;handler.removeCallbacks(meterTick);try{recorder.stop();recordName.setText("Kaydedildi: "+recorded.getName());msg("Kayıt tamamlandı");}catch(Exception e){msg("Kayıt tamamlanamadı: "+e.getMessage());if(recorded!=null)recorded.delete();recorded=null;}finally{release();level.setText("Mikrofon seviyesi: —");}}
+ void stopRecord(){if(!recording)return;recording=false;handler.removeCallbacks(meterTick);try{recorder.stop();recordName.setText("Vokal kaydı hazır");msg("Kayıt tamamlandı");}catch(Exception e){msg("Kayıt tamamlanamadı: "+e.getMessage());if(recorded!=null)recorded.delete();recorded=null;}finally{release();level.setText("Mikrofon seviyesi: —");}}
  void playRecording(){if(recorded==null||!recorded.exists()){msg("Önce kayıt yapın");return;}try{if(recordPlayer!=null)recordPlayer.release();recordPlayer=new MediaPlayer();recordPlayer.setDataSource(recorded.getAbsolutePath());recordPlayer.prepare();recordPlayer.start();msg("Kayıt oynatılıyor");}catch(Exception e){msg("Oynatma hatası: "+e.getMessage());}}
- @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==11&&result==RESULT_OK&&data!=null){loadLyrics(data.getData());return;}if(request==10&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri==null)return;try{if(player!=null)player.release();player=new MediaPlayer();player.setDataSource(this,uri);player.prepare();musicName.setText("Seçilen: "+uri.getLastPathSegment());msg("Müzik yüklendi");autoLyrics(uri);}catch(Exception e){msg("Müzik açılamadı: "+e.getMessage());}}}
+ @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==11&&result==RESULT_OK&&data!=null){loadLyrics(data.getData());return;}if(request==10&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri==null)return;try{if(player!=null)player.release();player=new MediaPlayer();player.setDataSource(this,uri);player.prepare();currentSong=uri;String songName="Seçilen şarkı";try{MediaMetadataRetriever mr=new MediaMetadataRetriever();mr.setDataSource(this,uri);String title=mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);String artist=mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);if(title!=null&&!title.trim().isEmpty())songName=title+(artist==null?"":" — "+artist);mr.release();}catch(Exception ignored){}musicName.setText(songName);msg("Müzik hazır");autoLyrics(uri);}catch(Exception e){msg("Müzik açılamadı: "+e.getMessage());}}}
  @Override protected void onDestroy(){handler.removeCallbacks(lyricsTick);if(recording)stopRecord();if(player!=null)player.release();if(recordPlayer!=null)recordPlayer.release();super.onDestroy();}
 }
