@@ -31,7 +31,7 @@ public class MainActivity extends Activity {
  ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setFitsSystemWindows(true);
  root=new LinearLayout(this);root.setOrientation(1);root.setPadding(16,20,16,28);root.setBackgroundColor(BG);scroll.addView(root);setContentView(scroll);
  label("✦ ELİF",34,GOLD);
- label("KARAOKE  •  SES KAYIT STÜDYOSU  v0.8",13,PURPLE);
+ label("KARAOKE  •  SES KAYIT STÜDYOSU  v0.9",13,PURPLE);
  status=label("Şarkınızı seçerek başlayın",15,Color.WHITE);
  musicName=label("Henüz şarkı seçilmedi",19,GOLD);
  button("♫  ŞARKI SEÇ / ARŞİVE EKLE",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,10);});
@@ -92,12 +92,24 @@ public class MainActivity extends Activity {
   }).start();
  }
  void showMusicArchive(){
-  android.content.SharedPreferences p=getSharedPreferences("music_archive",MODE_PRIVATE);
-  String raw=p.getString("uris","");
-  if(raw.isEmpty()){msg("Arşiv boş. ŞARKI SEÇ ile MP3 ekleyin.");return;}
-  String[] all=raw.split("\\n");ArrayList<String> saved=new ArrayList<>();ArrayList<String> names=new ArrayList<>();
-  for(String u:all){if(u.trim().isEmpty())continue;try{Uri uri=Uri.parse(u);String name=displaySongName(uri);saved.add(u);names.add(name);}catch(Exception ignored){}}
-  new AlertDialog.Builder(this).setTitle("Müzik Arşivim ("+saved.size()+")").setItems(names.toArray(new String[0]),(d,w)->openSong(Uri.parse(saved.get(w)))).setNegativeButton("Kapat",null).show();
+  File folder=new File(getFilesDir(),"music");File[] songs=folder.listFiles((dir,name)->name.endsWith(".mp3")||name.endsWith(".m4a")||name.endsWith(".wav")||name.endsWith(".ogg"));
+  if(songs==null||songs.length==0){msg("Arşiv boş. ŞARKI SEÇ ile MP3 ekleyin.");return;}
+  Arrays.sort(songs,(a,b)->a.getName().compareToIgnoreCase(b.getName()));
+  String[] names=new String[songs.length];for(int i=0;i<songs.length;i++)names[i]=songs[i].getName();
+  new AlertDialog.Builder(this).setTitle("Müzik Arşivim ("+songs.length+")").setItems(names,(d,w)->openSong(Uri.fromFile(songs[w]))).setNegativeButton("Kapat",null).show();
+ }
+ void importSong(Uri source){
+  new Thread(()->{
+   try{
+    File folder=new File(getFilesDir(),"music");if(!folder.exists()&&!folder.mkdirs())throw new IOException("Arşiv klasörü oluşturulamadı");
+    String name=displaySongName(source).replaceAll("[^\\p{L}\\p{N}._ -]","_");if(name.isEmpty())name="muzik.mp3";
+    File dest=new File(folder,System.currentTimeMillis()+"-"+name);
+    try(InputStream in=getContentResolver().openInputStream(source);OutputStream out=new FileOutputStream(dest)){
+     if(in==null)throw new IOException("Dosya okunamadı");byte[] buf=new byte[65536];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);
+    }
+    runOnUiThread(()->{openSong(Uri.fromFile(dest));msg("MP3 ELİF arşivine kaydedildi. Sözler aranıyor.");});
+   }catch(Exception e){final String error=e.getMessage();runOnUiThread(()->msg("MP3 aktarılamadı: "+error));}
+  }).start();
  }
  String displaySongName(Uri uri){
   String name="Şarkı";try(android.database.Cursor cursor=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){if(cursor!=null&&cursor.moveToFirst())name=cursor.getString(0);}catch(Exception ignored){}
@@ -183,6 +195,6 @@ void refreshMics(){inputs.clear();ArrayList<String> names=new ArrayList<>();name
  void release(){if(recorder!=null){try{recorder.release();}catch(Exception ignored){}recorder=null;}}
  void stopRecord(){if(!recording)return;recording=false;if(silentMode)silentPositionMs=(int)(silentBaseMs+android.os.SystemClock.elapsedRealtime()-silentStartMs);handler.removeCallbacks(meterTick);try{recorder.stop();recordName.setText("Vokal kaydı hazır");msg(silentMode?"Çıplak ses kaydı tamamlandı. MP3 ile miks sonraki aşamada.":"Kayıt tamamlandı");}catch(Exception e){msg("Kayıt tamamlanamadı: "+e.getMessage());if(recorded!=null)recorded.delete();recorded=null;}finally{release();level.setText("Mikrofon seviyesi: —");}}
  void playRecording(){if(recorded==null||!recorded.exists()){msg("Önce kayıt yapın");return;}try{if(recordPlayer!=null)recordPlayer.release();recordPlayer=new MediaPlayer();recordPlayer.setDataSource(recorded.getAbsolutePath());recordPlayer.prepare();recordPlayer.start();msg("Kayıt oynatılıyor");}catch(Exception e){msg("Oynatma hatası: "+e.getMessage());}}
- @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==11&&result==RESULT_OK&&data!=null){loadLyrics(data.getData());return;}if(request==10&&result==RESULT_OK&&data!=null)openSong(data.getData());}
+ @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==11&&result==RESULT_OK&&data!=null){loadLyrics(data.getData());return;}if(request==10&&result==RESULT_OK&&data!=null)importSong(data.getData());}
  @Override protected void onDestroy(){handler.removeCallbacks(lyricsTick);if(recording)stopRecord();if(player!=null)player.release();if(recordPlayer!=null)recordPlayer.release();super.onDestroy();}
 }
