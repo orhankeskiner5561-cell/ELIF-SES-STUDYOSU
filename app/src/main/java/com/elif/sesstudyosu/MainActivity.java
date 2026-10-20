@@ -31,7 +31,7 @@ public class MainActivity extends Activity {
  ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setFitsSystemWindows(true);
  root=new LinearLayout(this);root.setOrientation(1);root.setPadding(16,20,16,28);root.setBackgroundColor(BG);scroll.addView(root);setContentView(scroll);
  label("✦ ELİF",34,GOLD);
- label("KARAOKE  •  SES KAYIT STÜDYOSU  v0.9",13,PURPLE);
+ label("KARAOKE  •  SES KAYIT STÜDYOSU  v1.0",13,PURPLE);
  status=label("Şarkınızı seçerek başlayın",15,Color.WHITE);
  musicName=label("Henüz şarkı seçilmedi",19,GOLD);
  button("♫  ŞARKI SEÇ / ARŞİVE EKLE",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,10);});
@@ -107,7 +107,7 @@ public class MainActivity extends Activity {
     try(InputStream in=getContentResolver().openInputStream(source);OutputStream out=new FileOutputStream(dest)){
      if(in==null)throw new IOException("Dosya okunamadı");byte[] buf=new byte[65536];int n;while((n=in.read(buf))!=-1)out.write(buf,0,n);
     }
-    runOnUiThread(()->{openSong(Uri.fromFile(dest));msg("MP3 ELİF arşivine kaydedildi. Sözler aranıyor.");});
+    runOnUiThread(()->{openSong(Uri.fromFile(dest));msg("MP3 ELİF arşivine kaydedildi. "+(player!=null&&player.getDuration()>900000?"Uzun albüm dosyası: otomatik söz eşleştirmesi için tek şarkılık MP3 önerilir.":"Sözler aranıyor."));});
    }catch(Exception e){final String error=e.getMessage();runOnUiThread(()->msg("MP3 aktarılamadı: "+error));}
   }).start();
  }
@@ -177,7 +177,7 @@ public class MainActivity extends Activity {
     }
     if(synced==null)throw new Exception("Bu şarkı için zamanlı söz bulunamadı. İsterseniz LRC dosyası ekleyin");
     ArrayList<Long> times=new ArrayList<>();ArrayList<String> lines=new ArrayList<>();
-    java.util.regex.Pattern pattern=java.util.regex.Pattern.compile("\\\\[(\\\\d{1,2}):(\\\\d{2})(?:\\\\.(\\\\d{1,3}))?\\\\]");
+    java.util.regex.Pattern pattern=java.util.regex.Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,3}))?\\]");
     for(String line:synced.split("\\n")){java.util.regex.Matcher m=pattern.matcher(line);if(m.find()){int frac=m.group(3)==null?0:Integer.parseInt((m.group(3)+"00").substring(0,3));times.add((Long.parseLong(m.group(1))*60+Long.parseLong(m.group(2)))*1000+frac);lines.add(line.substring(m.end()).trim());}}
     if(times.isEmpty())throw new Exception("Zamanlı sözler okunamadı");
     runOnUiThread(()->{if(req!=lyricsRequest)return;lyricTimes=times;lyricLines=lines;lyricsView.setText("✓ "+lines.size()+" satır söz hazır. OYNAT veya KAYDET ile başlayın.");});
